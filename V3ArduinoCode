@@ -1,0 +1,68 @@
+#include <Wire.h>
+
+const int motorPin = 9;  // PWM pin for motor control
+const int sensorPin = 7; // Interrupt pin for phototransistor output
+
+volatile unsigned long pulseCount = 0;
+unsigned long prevTime = 0;
+float rpm = 0;
+
+int targetRPM = 0;
+int runTime = 0;  
+unsigned long startTime = 0;
+bool motorRunning = false;
+float Kp = 0.2;
+
+void rpmISR() {
+    pulseCount++;
+}
+
+void setup() {
+    Serial.begin(9600);
+    pinMode(motorPin, OUTPUT);
+    pinMode(sensorPin, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(sensorPin), rpmISR, FALLING);
+
+    Serial.println("Ready for input: [RPM] [Time]");
+}
+
+void loop() {
+    if (Serial.available() > 0 && !motorRunning) {
+        targetRPM = Serial.parseInt();
+        runTime = Serial.parseInt();
+
+        if (targetRPM <= 0 || runTime <= 0) {
+            Serial.println("Invalid input");
+            return;
+        }
+
+        startTime = millis();
+        motorRunning = true;
+        analogWrite(motorPin, 75);
+        Serial.println("Motor started");
+    }
+
+    if (motorRunning) {
+        if (millis() - prevTime >= 1000) {
+            noInterrupts();
+            float timeElapsed = (millis() - prevTime) / 60000.0;
+            rpm = (pulseCount / 2.0) / timeElapsed;
+            pulseCount = 0;
+            prevTime = millis();
+            interrupts();
+
+            float error = targetRPM - rpm;
+            int outputPWM = constrain(75 + (Kp * error), 0, 255);
+            analogWrite(motorPin, outputPWM);
+
+            Serial.print("RPM:");
+            Serial.println(rpm);
+        }
+
+        if ((millis() - startTime) / 1000 >= runTime) {
+            analogWrite(motorPin, 0);
+            motorRunning = false;
+            Serial.println("Done");
+        }
+    }
+}
