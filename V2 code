@@ -1,0 +1,77 @@
+const int motorPin = 9;  // PWM pin for motor control
+const int sensorPin = 7; // Interrupt pin for phototransistor output
+
+volatile unsigned long pulseCount = 0;
+unsigned long prevTime = 0;
+float rpm = 0;
+
+int targetRPM = 0;
+int runTime = 0;  // In seconds
+unsigned long startTime = 0;
+bool motorRunning = false;
+
+float Kp = .05;  // Proportional control gain
+
+void rpmISR() {
+    pulseCount++; // Increment count on each pulse (one revolution detected)
+}
+
+void setup() {
+    Serial.begin(9600);
+    pinMode(motorPin, OUTPUT);
+    pinMode(sensorPin, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(sensorPin), rpmISR, FALLING);
+    
+    Serial.println("Waiting for input from GUI...");
+}
+
+void loop() {
+    if (Serial.available() > 0 && !motorRunning) {
+        targetRPM = Serial.parseInt();
+        targetRPM = targetRPM * 2 - targetRPM*.1;
+        runTime = Serial.parseInt();
+
+        if (targetRPM <= 0 || runTime <= 0) {
+            Serial.println("ERROR: Invalid input!");
+            return;
+        }
+
+        startTime = millis();
+        motorRunning = true;
+
+
+        Serial.print("START ");
+        Serial.print(targetRPM);
+        Serial.print(" ");
+        Serial.println(runTime);
+    }
+
+    if (motorRunning) {
+        if (millis() - prevTime >= 1000) {
+            noInterrupts();
+            float timeElapsed = (millis() - prevTime) / 60000.0;
+            rpm = (pulseCount / 2.0) / timeElapsed; // RPM Calculation
+            pulseCount = 0;
+            prevTime = millis();
+            interrupts();
+            
+            float error = targetRPM - rpm;
+            int outputPWM = constrain(25 + (Kp * error), 0, 255);
+            analogWrite(motorPin, outputPWM);
+
+            unsigned long elapsedTime = (millis() - startTime) / 1000;
+            int timeLeft = runTime - elapsedTime;
+
+            Serial.print("UPDATE ");
+            Serial.print(rpm);
+            Serial.print(" ");
+            Serial.println(timeLeft);
+
+            if (elapsedTime >= runTime) {
+                analogWrite(motorPin, 0);
+                motorRunning = false;
+                Serial.println("DONE");
+            }
+        }
+    }
+}
