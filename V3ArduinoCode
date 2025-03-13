@@ -6,12 +6,12 @@ const int sensorPin = 7; // Interrupt pin for phototransistor output
 volatile unsigned long pulseCount = 0;
 unsigned long prevTime = 0;
 float rpm = 0;
-
+int outputPWM = 0;
 int targetRPM = 0;
 int runTime = 0;  
 unsigned long startTime = 0;
 bool motorRunning = false;
-float Kp = 0.2;
+float Kp = 0.05;
 
 void rpmISR() {
     pulseCount++;
@@ -29,6 +29,7 @@ void setup() {
 void loop() {
     if (Serial.available() > 0 && !motorRunning) {
         targetRPM = Serial.parseInt();
+        //targetRPM = targetRPM * 1.7;  // Adjust target RPM if needed
         runTime = Serial.parseInt();
 
         if (targetRPM <= 0 || runTime <= 0) {
@@ -38,29 +39,36 @@ void loop() {
 
         startTime = millis();
         motorRunning = true;
-        analogWrite(motorPin, 75);
+        analogWrite(motorPin, 75);  // Start the motor
         Serial.println("Motor started");
     }
 
     if (motorRunning) {
         if (millis() - prevTime >= 1000) {
             noInterrupts();
-            float timeElapsed = (millis() - prevTime) / 60000.0;
-            rpm = (pulseCount / 2.0) / timeElapsed;
+            float timeElapsed = (millis() - prevTime);  // Calculate time elapsed in minutes
+            rpm = (pulseCount / 2.0) * 60;  // Calculate RPM based on pulses per minute
             pulseCount = 0;
             prevTime = millis();
             interrupts();
 
             float error = targetRPM - rpm;
-            int outputPWM = constrain(75 + (Kp * error), 0, 255);
+            outputPWM = constrain(outputPWM + (Kp * error), 0, 255);  // Adjust PWM to match target RPM
             analogWrite(motorPin, outputPWM);
 
-            Serial.print("RPM:");
-            Serial.println(rpm);
+            // Calculate time left in seconds
+            int timeLeft = runTime - (millis() - startTime) / 1000;
+
+            // Send update to Kivy app
+            Serial.print("UPDATE ");
+            Serial.print(rpm);
+            Serial.print(" ");
+            Serial.println(timeLeft);  // Send time left to the Kivy GUI
         }
 
+        // Stop motor when run time is reached
         if ((millis() - startTime) / 1000 >= runTime) {
-            analogWrite(motorPin, 0);
+            analogWrite(motorPin, 0);  // Stop motor
             motorRunning = false;
             Serial.println("Done");
         }
