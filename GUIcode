@@ -20,7 +20,7 @@ class CentrifugeController(BoxLayout):
 
         # Open Serial Connection to Arduino (Update with correct port)
         try:
-            self.arduino = serial.Serial('/dev/tty.usbmodem101', 9600, timeout=1)
+            self.arduino = serial.Serial('/dev/cu.usbmodem1101', 9600, timeout=1)
             time.sleep(2)  # Wait for connection
         except:
             self.arduino = None
@@ -102,10 +102,13 @@ class CentrifugeController(BoxLayout):
         if self.arduino and self.arduino.in_waiting > 0:
             data = self.arduino.readline().decode().strip()
 
+            print(f"Received data: {data}")  # Debug: Check received data
+
             if data.startswith("UPDATE"):
                 parts = data.split()
                 if len(parts) == 3:
                     _, rpm, time_left = parts
+                    print(f"Parsed RPM: {rpm}, Time Left: {time_left}")  # Debug: Check parsed data
                     self.status_section.children[1].text = f"Current Speed: {rpm} RPM"
                     self.status_section.children[0].text = f"Time Left: {time_left} s"
 
